@@ -82,7 +82,7 @@ jobs:
       #   if: ${{ inputs.trafficMode == 'bluegreen' }}
       #   run: |
       #     revisions=$(az containerapp ingress traffic show \
-      #       --name ca-issuance \
+      #       --name ca-patient \
       #       --resource-group rg-platform \
       #       --query '[?weight == `0` && label == null].revisionName')
 

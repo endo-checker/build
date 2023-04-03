@@ -1,0 +1,29 @@
+name: Test secrets
+
+on:
+  workflow_call:
+    inputs:
+      cacheKey:
+        type: string
+        description: |
+          Cache key for the patch file. This should be unique for each patch file.
+        
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Restore cached kustomization.yaml
+        if: ${{ inputs.cacheKey }} != ''
+        uses: actions/cache@v3
+        with:
+          path: ./.github/kustomize/kustomization.yaml
+          key: ${{ inputs.cacheKey }}
+
+      - name:
+        run: |
+          cat ./.github/kustomize/kustomization.yaml

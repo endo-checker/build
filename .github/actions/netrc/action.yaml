@@ -1,0 +1,40 @@
+
+name: Generate .netrc
+description: Generates a .netrc file for private repo access
+# inputs:
+#   who-to-greet:  # id of input
+#     description: 'Who to greet'
+#     required: true
+#     default: 'World'
+# outputs:
+#   random-number:
+#     description: "Random number"
+#     value: ${{ steps.random-number-generator.outputs.random-number }}
+runs:
+  using: composite
+  steps:
+    - name: Private repo access
+      shell: bash
+      env:
+        # use env vars to write unmasked secrets to .netrc file
+        BUF_USER: ${{ secrets.BUF_USER }}
+        BUF_TOKEN: ${{ secrets.BUF_PAT }}
+        REPO_USER: ${{ secrets.REPO_USER }}
+        REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+      run: |
+        echo "
+          machine github.com login $REPO_USER password $REPO_TOKEN
+          machine buf.build login $BUF_USER password $BUF_PAT
+        " >> ~/.netrc
+
+  # using: "composite"
+  # steps:
+  #   - run: echo Hello ${{ inputs.who-to-greet }}.
+  #     shell: bash
+  #   - id: random-number-generator
+  #     run: echo "random-number=$(echo $RANDOM)" >> $GITHUB_OUTPUT
+  #     shell: bash
+  #   - run: echo "${{ github.action_path }}" >> $GITHUB_PATH
+  #     shell: bash
+  #   - run: goodbye.sh
+  #     shell: bash

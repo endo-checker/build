@@ -1,0 +1,94 @@
+# Manage traffic routing
+
+name: Route Traffic
+
+on:
+  workflow_call:
+    inputs:
+      resourceGroup:
+        type: string
+        required: true
+        description: |
+          The container app resource group.
+      trafficMode:
+        type: string
+        default: latest
+        description: |
+          The environment to deploy to. One of 'latest', or 'bluegreen'.
+
+jobs:
+  route:
+    name: Route
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Install Azure CLI extensions
+        run: az config set extension.use_dynamic_install=yes_without_prompt
+
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get latest revision
+        run: |
+          echo latestRevision=$(az containerapp revision list \
+            --name ca-${{ github.event.repository.name }} \
+            --resource-group ${{ inputs.resourceGroup }} \
+            --query '[-1:].name | @[0]') >> $GITHUB_ENV
+
+      # trafficMode: 'latest'
+      #  - send live traffic to latest revision
+      - name: Forward traffic to latest revision
+        if: ${{ inputs.trafficMode == 'latest' }}
+        run: |
+          az containerapp ingress traffic set \
+              --name ca-${{ github.event.repository.name }} \
+              --resource-group ${{ inputs.resourceGroup }}  \
+              --revision-weight ${{ env.latestRevision }}=100
+              # --revision-weight latest=100
+
+      - name: Set latest revision as 'staging'
+        run: |
+          az containerapp revision label add \
+              --name ca-${{ github.event.repository.name }} \
+              --resource-group ${{ inputs.resourceGroup }}  \
+              --label staging \
+              --revision ${{ env.latestRevision }} \
+              --no-prompt
+
+      # deactivate unused revisions
+      # - unused == all revisions with zero traffic, except the latest
+      - name: Deactivate unused revisions
+        run: |
+          revisions=$(az containerapp revision list \
+            --name ca-${{ github.event.repository.name }} \
+            --resource-group ${{ inputs.resourceGroup }} \
+            --query '[:-1] | @[?properties.trafficWeight == `0`].name')
+
+          for revision in  $(echo $revisions | jq -r '.[]'); do
+            az containerapp revision deactivate \
+              --revision $revision \
+              --name ca-${{ github.event.repository.name }} \
+              --resource-group ${{ inputs.resourceGroup }}
+          done
+
+      # # remove unused revisions from ingress
+      # - name: Remove unused revisions from ingress
+      #   if: ${{ inputs.trafficMode == 'bluegreen' }}
+      #   run: |
+      #     revisions=$(az containerapp ingress traffic show \
+      #       --name ca-issuance \
+      #       --resource-group rg-platform \
+      #       --query '[?weight == `0` && label == null].revisionName')
+
+      #     for revision in  $(echo $revisions | jq -r '.[]'); do
+      #       az containerapp revision deactivate \
+      #         --revision $revision \
+      #         --name ca-${{ github.event.repository.name }} \
+      #         --resource-group ${{ inputs.resourceGroup }}
+      #     done

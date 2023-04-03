@@ -1,0 +1,123 @@
+# Deploy Container App
+
+name: Deploy Update
+
+on:
+  workflow_call:
+    inputs:
+      resourceGroup:
+        type: string
+        required: true
+        description: |-
+          The container app resource group.
+      acrName:
+        type: string
+        required: true
+        description: |-
+          The Azure container registry name.
+      cacheKey:
+        type: string
+        description: |
+          Cache key for the patch file. This should be unique for each patch file.
+      customTemplate:
+        type: boolean
+        default: false
+        description: |
+          Specifies whether the calling workflow will use its own Container Apps deployment template or not.
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Increment version
+        id: semver
+        uses: paulhatch/semantic-version@v5.0.2
+
+      - name: Generate version-dependent values
+        id: version
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const version = "${{ steps.semver.outputs.version_tag }}"
+            return {
+              imageName: `${{ inputs.acrName }}.azurecr.io/${{ github.event.repository.name }}:${version}`,
+              revisionSuffix: version.replace(/\./g, '-')
+            }
+
+      - name: Restore cached kustomization.yaml
+        if: inputs.cacheKey != ''
+        uses: actions/cache/restore@v3
+        with:
+          path: ./.github/kustomize/kustomization.yaml
+          key: ${{ inputs.cacheKey }}
+      
+      - name: Use shared Container Apps template
+        if: inputs.customTemplate == false
+        run: |
+          cd ./.github/kustomize
+          kustomize edit add resource https://${{ secrets.REPO_USER }}:${{ secrets.REPO_TOKEN }}@github.com/endo-checker/build/kustomize/
+
+      - name: Add Kustomize patches
+        run: |
+          cd ./.github/kustomize
+          kustomize edit add patch --kind containerapp --patch '[
+            {"op": "replace", "path": "/properties/configuration/secrets/0/value", "value": "${{ secrets.ACR_PASSWORD }}"},
+            {"op": "replace", "path": "/properties/template/containers/0/image", "value": "${{ fromJSON(steps.version.outputs.result).imageName }}"},
+            {"op": "replace", "path": "/properties/template/revisionSuffix", "value": "${{ fromJSON(steps.version.outputs.result).revisionSuffix }}"}
+          ]'
+
+      - name: Build deployment resources
+        run: |
+          kustomize build ./.github/kustomize | yq 'del(.metadata)' - > .github/kustomize/kustomized.yaml
+          
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Docker private repo access
+        env:
+          BUF_USER: ${{ secrets.BUF_USER }}
+          BUF_TOKEN: ${{ secrets.BUF_PAT }}
+          REPO_USER: ${{ secrets.REPO_USER }}
+          REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+        run: |
+          echo "
+            machine github.com login $REPO_USER password $REPO_TOKEN
+            machine buf.build login $BUF_USER password $BUF_PAT
+          " >> .netrc
+
+      - name: Deploy
+        uses: azure/container-apps-deploy-action@v0
+        with:
+          containerAppName: ca-${{ github.event.repository.name }}
+          resourceGroup: ${{ inputs.resourceGroup }}
+          appSourcePath: ${{ github.workspace }}
+          acrName: ${{ inputs.acrName }}
+          imageToBuild: ${{ fromJSON(steps.version.outputs.result).imageName }}
+          imageToDeploy: ${{ fromJSON(steps.version.outputs.result).imageName }}
+          yamlConfigPath: .github/kustomize/kustomized.yaml
+
+      - name: Create GitHub release
+        uses: actions/github-script@v6
+        with:
+          retries: 2
+          retry-exempt-status-codes: 401, 403, 404, 422
+          script: |
+            github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: "${{ steps.semver.outputs.version_tag }}"
+            })

@@ -1,0 +1,40 @@
+
+name: Version Repository
+
+on:
+  workflow_call:
+    inputs:
+      increment:
+        description: |
+          The type of version increment to perform. One of major|minor|patch.
+        default: patch
+        type: string
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Get tags
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Increment version
+        id: semver
+        uses: paulhatch/semantic-version@v5.0.3
+
+      - name: Create GitHub release
+        uses: actions/github-script@v6
+        with:
+          retries: 2
+          retry-exempt-status-codes: 401, 403, 404, 422
+          script: |
+            github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: "${{ steps.semver.outputs.version_tag }}"
+            })

@@ -1,0 +1,49 @@
+metadata:
+  name: DEPLOYMENT_NAME
+
+# apiVersion: 2022-03-01
+kind: containerapp
+# location: australiaeast
+name: DEPLOYMENT_NAME
+resourceGroup: rg-platform
+type: Microsoft.App/containerApps
+# identity:
+#   IDENTITY
+properties:
+  managedEnvironmentId: MANAGED_ENVIRONMENT_ID
+  configuration:
+    activeRevisionsMode: Multiple
+    secrets:
+      # TODO: use managed identity
+      - name: registry-secret
+        value: ACR_PASSWORD
+    ingress:
+      targetPort: 8080
+      external: false
+      transport: Auto
+      allowInsecure: false
+      # traffic:
+      #   - latestRevision: false
+      #     weight: 100
+    registries:
+      - server: acrendochecker.azurecr.io
+        # identity: acrendochecker
+        passwordSecretRef: registry-secret
+        username: acrendochecker
+  template:
+    revisionSuffix: REVISION_SUFFIX
+    containers:
+      - image: CONTAINER_IMAGE
+        name: CONTAINER_NAME
+        resources:
+          cpu: 0.5
+          memory: 1Gi
+          ephemeralStorage: 1Gi
+        probes:
+          - type: liveness
+            httpGet:
+              path: "/livez"
+              port: 8080
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

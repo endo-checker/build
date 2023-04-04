@@ -87,8 +87,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # - name: Docker private repo access
-      - name: Docker public repo access
+      - name: Docker repo access
         env:
           BUF_USER: ${{ secrets.BUF_USER }}
           BUF_TOKEN: ${{ secrets.BUF_PAT }}

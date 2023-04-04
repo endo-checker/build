@@ -1,6 +1,5 @@
-
 name: Generate .netrc
-description: Generates a .netrc file for private repo access
+description: Generates a .netrc file for  repo access
 # inputs:
 #   who-to-greet:  # id of input
 #     description: 'Who to greet'
@@ -13,8 +12,7 @@ description: Generates a .netrc file for private repo access
 runs:
   using: composite
   steps:
-    - name: Public repo access
-    #   - name: Private repo access
+    - name: repo access
       shell: bash
       env:
         # use env vars to write unmasked secrets to .netrc file

@@ -15,8 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # - name: Private repo access
-      - name: Public repo access
+      - name: Private repo access
         env:
           # use env vars to write unmasked secrets to .netrc file
           BUF_USER: ${{ secrets.BUF_USER }}
@@ -34,13 +33,13 @@ jobs:
       #     git config --global url.https://$GH_ACCESS_TOKEN@github.com/.insteadOf https://github.com/
 
 
-      # - name: Lint
-      #   uses: golangci/golangci-lint-action@v3
-      #   with:
-      #     version: latest
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
 
       - name: Unit tests
         run: |
           go env -w GOPRIVATE="github.com/${{ github.repository_owner }}/*"
           go mod download
-        # go test -tags jwx_es256k -v ./...
+          go test -tags jwx_es256k -v ./...
